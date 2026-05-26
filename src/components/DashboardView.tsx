@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 import { MockTest, PDFFile } from '../types';
 import { motion } from 'motion/react';
-import { connectGoogleDrive } from '../services/drive';
+import { useDrive } from '../context/DriveContext';
 
 interface DashboardViewProps {
   mocks: MockTest[];
@@ -37,8 +37,8 @@ export default function DashboardView({
   setActiveTab
 }: DashboardViewProps) {
   const [selectedSubjectFilter, setSelectedSubjectFilter] = useState<string>('all');
+  const { googleDriveConnected, fetchingDrivePdfs, connectDrive, refreshDrivePdfs } = useDrive();
   const [connectingDrive, setConnectingDrive] = useState(false);
-  const [driveConnected, setDriveConnected] = useState<boolean>(() => !!localStorage.getItem("drive_wristband"));
 
   // Compute stats
   const totalMocks = mocks.length;
@@ -62,9 +62,8 @@ export default function DashboardView({
   const handleGoogleDriveConnect = async () => {
     setConnectingDrive(true);
     try {
-      const success = await connectGoogleDrive();
+      const success = await connectDrive();
       if (success) {
-        setDriveConnected(true);
         // Navigate to upload tab so they can see the files or import them
         setActiveTab('upload');
       }
@@ -354,38 +353,65 @@ export default function DashboardView({
           </div>
 
           <div className="space-y-3 bg-[#0C0C0C] p-5 rounded-2xl border border-[#1F1F1F] shadow-2xl">
-            {pdfs.map((pdf) => (
-              <div
-                key={pdf.id}
-                className="p-3.5 rounded bg-[#0F0F0F] border border-[#1F1F1F] flex flex-col gap-2 transition-colors hover:bg-[#121212]"
-              >
-                <div className="flex items-start justify-between gap-3 font-sans">
-                  <div className="flex items-center gap-2.5 min-w-0">
-                    <FileText className="w-4 h-4 text-[#555] shrink-0" />
-                    <span className="font-sans font-medium text-xs text-[#EDEDED] truncate" title={pdf.name}>
-                      {pdf.name}
+            {googleDriveConnected && (
+              <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-950/25 border border-emerald-900/60 rounded-xl text-[10px] text-emerald-400 font-mono font-bold mb-4 justify-center">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                <span>Google Drive Connected</span>
+              </div>
+            )}
+
+            {fetchingDrivePdfs ? (
+              <div className="py-12 flex flex-col items-center justify-center gap-3 text-center">
+                <span className="h-5 w-5 border-2 border-[#888] border-t-transparent rounded-full animate-spin" />
+                <p className="font-sans text-[11px] text-[#555]">Restoring Drive session...</p>
+              </div>
+            ) : pdfs.length > 0 ? (
+              pdfs.map((pdf) => (
+                <div
+                  key={pdf.id}
+                  className="p-3.5 rounded bg-[#0F0F0F] border border-[#1F1F1F] flex flex-col gap-2 transition-colors hover:bg-[#121212]"
+                >
+                  <div className="flex items-start justify-between gap-3 font-sans">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <FileText className="w-4 h-4 text-red-500 shrink-0" />
+                      <span className="font-sans font-medium text-xs text-[#EDEDED] truncate" title={pdf.name}>
+                        {pdf.name}
+                      </span>
+                    </div>
+                    <span className="font-mono text-[8px] bg-[#121212] border border-[#222] text-[#888] px-1.5 py-0.5 rounded uppercase tracking-wider shrink-0 font-bold">
+                      {pdf.pageCount} pgs
                     </span>
                   </div>
-                  <span className="font-mono text-[8px] bg-[#121212] border border-[#222] text-[#888] px-1.5 py-0.5 rounded uppercase tracking-wider shrink-0 font-bold">
-                    {pdf.pageCount} pgs
-                  </span>
-                </div>
 
-                <div className="flex items-center justify-between mt-1.5 text-[10px] font-mono text-[#555] font-bold">
-                  <span>{pdf.subject}</span>
-                  <button
-                    onClick={() => onOpenConfig(pdf.id)}
-                    className="text-[#EDEDED] hover:text-white underline font-bold flex items-center gap-1 cursor-pointer"
-                  >
-                    <span>Build Mock</span>
-                    <Plus className="w-2.5 h-2.5" />
-                  </button>
+                  <div className="flex items-center justify-between mt-1.5 text-[10px] font-mono text-[#555] font-bold">
+                    <span>{pdf.subject}</span>
+                    <button
+                      onClick={() => onOpenConfig(pdf.id)}
+                      className="text-[#EDEDED] hover:text-white underline font-bold flex items-center gap-1 cursor-pointer"
+                    >
+                      <span>Build Mock</span>
+                      <Plus className="w-2.5 h-2.5" />
+                    </button>
+                  </div>
                 </div>
+              ))
+            ) : googleDriveConnected ? (
+              <div className="py-6 flex flex-col items-center text-center">
+                <div className="w-10 h-10 rounded-lg bg-[#121212] border border-[#1F1F1F] flex items-center justify-center mb-4 text-[#555]">
+                  <FolderOpen className="w-5 h-5" />
+                </div>
+                <h5 className="font-sans font-bold text-sm text-white mb-1">No PDFs found</h5>
+                <p className="font-sans text-[11px] text-[#555] max-w-[200px] leading-relaxed mb-4">
+                  No compatible study files found in connected Google Drive.
+                </p>
+                <button
+                  onClick={() => refreshDrivePdfs()}
+                  className="font-mono text-[9px] text-[#888] hover:text-white underline font-bold cursor-pointer"
+                >
+                  Reload/Sync files
+                </button>
               </div>
-            ))}
-
-            {/* BEAUTIFUL SPACIOUS ONBOARDING EMPTY STATE - NO UPLOADS YET & CONNECT GOOGLE DRIVE CONNECT CTA */}
-            {pdfs.length === 0 && (
+            ) : (
               <div className="py-6 flex flex-col items-center text-center">
                 <div className="w-10 h-10 rounded-lg bg-[#121212] border border-[#1F1F1F] flex items-center justify-center mb-4 text-[#555]">
                   <FolderOpen className="w-5 h-5" />

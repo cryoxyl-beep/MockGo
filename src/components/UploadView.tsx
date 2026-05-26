@@ -9,29 +9,28 @@ import {
 } from 'lucide-react';
 import { PDFFile } from '../types';
 import { motion } from 'motion/react';
-import { connectGoogleDrive } from '../services/drive';
+import { useDrive } from '../context/DriveContext';
 
 interface UploadViewProps {
   pdfs: PDFFile[];
   onAddPdf: (pdf: Omit<PDFFile, 'id' | 'uploadDate'>) => void;
   onRemovePdf: (id: string) => void;
   onOpenConfig: (sourcePdfId?: string) => void;
-  googleDriveConnected?: boolean;
-  setGoogleDriveConnected?: (connected: boolean) => void;
-  fetchingDrivePdfs?: boolean;
-  onRefreshDrivePdfs?: () => Promise<void>;
 }
 
 export default function UploadView({
   pdfs,
   onAddPdf,
   onRemovePdf,
-  onOpenConfig,
-  googleDriveConnected = false,
-  setGoogleDriveConnected,
-  fetchingDrivePdfs = false,
-  onRefreshDrivePdfs
+  onOpenConfig
 }: UploadViewProps) {
+  const { 
+    googleDriveConnected, 
+    fetchingDrivePdfs, 
+    connectDrive, 
+    refreshDrivePdfs 
+  } = useDrive();
+
   const [dragActive, setDragActive] = useState<boolean>(false);
   const [driveEmail, setDriveEmail] = useState<string | null>(() => localStorage.getItem("drive_email"));
   const [driveName, setDriveName] = useState<string | null>(() => localStorage.getItem("drive_name"));
@@ -94,16 +93,10 @@ export default function UploadView({
   const handleConnectGoogleDrive = async () => {
     setSyncingDrive(true);
     try {
-      const success = await connectGoogleDrive();
+      const success = await connectDrive();
       if (success) {
-        if (setGoogleDriveConnected) {
-          setGoogleDriveConnected(true);
-        }
         setDriveEmail(localStorage.getItem("drive_email"));
         setDriveName(localStorage.getItem("drive_name"));
-        if (onRefreshDrivePdfs) {
-          await onRefreshDrivePdfs();
-        }
       }
     } catch (err) {
       console.error("Drive error:", err);
@@ -113,9 +106,12 @@ export default function UploadView({
   };
 
   const handleManualRefresh = async () => {
-    if (onRefreshDrivePdfs) {
-      setSyncingDrive(true);
-      await onRefreshDrivePdfs();
+    setSyncingDrive(true);
+    try {
+      await refreshDrivePdfs();
+    } catch (err) {
+      console.error("Manual sync failed:", err);
+    } finally {
       setSyncingDrive(false);
     }
   };

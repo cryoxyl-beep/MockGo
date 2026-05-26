@@ -18,9 +18,11 @@ import { MockTest, PDFFile, Message } from './types';
 import { INITIAL_MOCKS, INITIAL_PDFS, INITIAL_CHAT_MESSAGES } from './mockData';
 import { generateQuestionsForSubject } from './utils/questionGenerator';
 import { useAuth } from './context/AuthContext';
+import { useDrive } from './context/DriveContext';
 
 export default function App() {
   const { profile, loading, logout } = useAuth();
+  const { googleDriveConnected, drivePdfs, disconnectDrive } = useDrive();
 
   // Screen routing or tabs
   const [activeTab, setActiveTab] = useState<string>('dashboard');
@@ -46,37 +48,6 @@ export default function App() {
   const [calibrationOpen, setCalibrationOpen] = useState<boolean>(false);
   const [calibrationPdfId, setCalibrationPdfId] = useState<string | null>(null);
   
-  // Real Google Drive states
-  const [googleDriveConnected, setGoogleDriveConnected] = useState<boolean>(() => !!localStorage.getItem("drive_wristband"));
-  const [drivePdfs, setDrivePdfs] = useState<PDFFile[]>([]);
-  const [fetchingDrivePdfs, setFetchingDrivePdfs] = useState<boolean>(false);
-
-  const loadDrivePdfs = async () => {
-    if (!localStorage.getItem("drive_wristband")) {
-      setDrivePdfs([]);
-      return;
-    }
-    setFetchingDrivePdfs(true);
-    try {
-      const { fetchGoogleDrivePdfs, mapDriveFileToPdfFile } = await import('./services/drive');
-      const files = await fetchGoogleDrivePdfs();
-      const mapped = files.map(mapDriveFileToPdfFile);
-      setDrivePdfs(mapped);
-    } catch (err) {
-      console.error("Failed to load Google Drive PDFs:", err);
-    } finally {
-      setFetchingDrivePdfs(false);
-    }
-  };
-
-  useEffect(() => {
-    if (googleDriveConnected) {
-      loadDrivePdfs();
-    } else {
-      setDrivePdfs([]);
-    }
-  }, [googleDriveConnected, profile]);
-
   // Exam-taking states
   const [currentExamId, setCurrentExamId] = useState<string | null>(null);
   const [activeResultsId, setActiveResultsId] = useState<string | null>(null);
@@ -96,11 +67,7 @@ export default function App() {
 
   const handleLogout = async () => {
     await logout();
-    localStorage.removeItem("drive_wristband");
-    localStorage.removeItem("drive_email");
-    localStorage.removeItem("drive_name");
-    setGoogleDriveConnected(false);
-    setDrivePdfs([]);
+    disconnectDrive();
     setCurrentExamId(null);
     setActiveResultsId(null);
     setActiveTab('dashboard');
@@ -380,10 +347,6 @@ export default function App() {
             onAddPdf={handleAddPdf}
             onRemovePdf={handleRemovePdf}
             onOpenConfig={handleOpenCalibration}
-            googleDriveConnected={googleDriveConnected}
-            setGoogleDriveConnected={setGoogleDriveConnected}
-            fetchingDrivePdfs={fetchingDrivePdfs}
-            onRefreshDrivePdfs={loadDrivePdfs}
           />
         ) : activeTab === 'ai-builder' ? (
           <ChatBuilderView
