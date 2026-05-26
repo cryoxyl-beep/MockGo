@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { MockTest, PDFFile } from '../types';
 import { motion } from 'motion/react';
+import { connectGoogleDrive } from '../services/drive';
 
 interface DashboardViewProps {
   mocks: MockTest[];
@@ -37,7 +38,7 @@ export default function DashboardView({
 }: DashboardViewProps) {
   const [selectedSubjectFilter, setSelectedSubjectFilter] = useState<string>('all');
   const [connectingDrive, setConnectingDrive] = useState(false);
-  const [driveConnected, setDriveConnected] = useState(false);
+  const [driveConnected, setDriveConnected] = useState<boolean>(() => !!localStorage.getItem("drive_wristband"));
 
   // Compute stats
   const totalMocks = mocks.length;
@@ -58,14 +59,20 @@ export default function DashboardView({
     ? mocks 
     : mocks.filter(m => m.subject === selectedSubjectFilter);
 
-  const simulateGoogleDriveConnect = () => {
+  const handleGoogleDriveConnect = async () => {
     setConnectingDrive(true);
-    setTimeout(() => {
+    try {
+      const success = await connectGoogleDrive();
+      if (success) {
+        setDriveConnected(true);
+        // Navigate to upload tab so they can see the files or import them
+        setActiveTab('upload');
+      }
+    } catch (err) {
+      console.error("Drive connection error:", err);
+    } finally {
       setConnectingDrive(false);
-      setDriveConnected(true);
-      // Navigate to upload tab so they can see the files or import them
-      setActiveTab('upload');
-    }, 1200);
+    }
   };
 
   return (
@@ -390,7 +397,7 @@ export default function DashboardView({
                 
                 {/* primary onboarding CTA: Connect Google Drive to begin! */}
                 <button
-                  onClick={simulateGoogleDriveConnect}
+                  onClick={handleGoogleDriveConnect}
                   disabled={connectingDrive}
                   className="w-full py-2.5 bg-white text-black font-semibold font-sans text-xs rounded shadow-lg flex items-center justify-center gap-2 hover:opacity-95 transition-all cursor-pointer disabled:opacity-50"
                 >

@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { PDFFile } from '../types';
 import { motion } from 'motion/react';
+import { connectGoogleDrive } from '../services/drive';
 
 interface UploadViewProps {
   pdfs: PDFFile[];
@@ -31,7 +32,9 @@ export default function UploadView({
 }: UploadViewProps) {
   const [dragActive, setDragActive] = useState<boolean>(false);
   const [showDriveSim, setShowDriveSim] = useState<boolean>(false);
-  const [googleDriveConnected, setGoogleDriveConnected] = useState<boolean>(false);
+  const [googleDriveConnected, setGoogleDriveConnected] = useState<boolean>(() => !!localStorage.getItem("drive_wristband"));
+  const [driveEmail, setDriveEmail] = useState<string | null>(() => localStorage.getItem("drive_email"));
+  const [driveName, setDriveName] = useState<string | null>(() => localStorage.getItem("drive_name"));
   const [syncingDrive, setSyncingDrive] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -90,16 +93,20 @@ export default function UploadView({
     fileInputRef.current?.click();
   };
 
-  const handleConnectGoogleDrive = () => {
-    if (!googleDriveConnected) {
-      setSyncingDrive(true);
-      setTimeout(() => {
+  const handleConnectGoogleDrive = async () => {
+    setSyncingDrive(true);
+    try {
+      const success = await connectGoogleDrive();
+      if (success) {
         setGoogleDriveConnected(true);
-        setSyncingDrive(false);
+        setDriveEmail(localStorage.getItem("drive_email"));
+        setDriveName(localStorage.getItem("drive_name"));
         setShowDriveSim(true);
-      }, 1500);
-    } else {
-      setShowDriveSim(true);
+      }
+    } catch (err) {
+      console.error("Drive error:", err);
+    } finally {
+      setSyncingDrive(false);
     }
   };
 
@@ -137,8 +144,16 @@ export default function UploadView({
         {/* Left main: Large Drag and Drop Zone */}
         <div className="lg:col-span-2 space-y-6">
           
-          <div className="flex items-center justify-between">
-            <span className="font-sans font-bold text-base text-white tracking-tight">Upload New Question Source</span>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <span className="font-sans font-bold text-base text-white tracking-tight block">Upload New Question Source</span>
+              {googleDriveConnected && driveEmail && (
+                <span className="inline-flex items-center gap-1.5 font-mono text-[10px] bg-emerald-950/20 text-emerald-400 border border-emerald-900/40 px-2.5 py-1 rounded">
+                  <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+                  <span>Linked Workspace: <strong className="text-[#EDEDED]">{driveEmail}</strong> {driveName ? `(${driveName})` : ''}</span>
+                </span>
+              )}
+            </div>
             
             <button
               id="upload-google-drive-btn"

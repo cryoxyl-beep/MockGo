@@ -1,15 +1,18 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-
-export interface UserProfile {
-  uid: string;
-  name: string;
-  email: string;
-  profilePhoto: string;
-  createdAt: string;
-}
+import { 
+  User as FirebaseUser,
+  onAuthStateChanged
+} from 'firebase/auth';
+import { auth } from '../lib/firebase';
+import { 
+  loginWithGoogle as signWithGoogleService, 
+  logoutUser as logoutService, 
+  upsertUserProfile, 
+  UserProfile 
+} from '../services/auth';
 
 interface AuthContextType {
-  user: any;
+  user: FirebaseUser | null;
   profile: UserProfile | null;
   loading: boolean;
   loginWithGoogle: () => Promise<void>;
@@ -19,40 +22,75 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [profile, setProfile] = useState<UserProfile | null>(() => {
-    const saved = localStorage.getItem('instamocks_user_session');
-    return saved ? JSON.parse(saved) : null;
-  });
-  const [loading, setLoading] = useState<boolean>(false);
+  const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [profile, setProfile] = useState<UserProfile | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+
+  useEffect(() => {
+    // Setup the active auth state observer
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      setLoading(true);
+      if (currentUser) {
+        setUser(currentUser);
+        try {
+          // Sync with Firestore
+          const profileData = await upsertUserProfile(currentUser);
+          setProfile(profileData);
+        } catch (err) {
+          console.error("Failed to sync profile to database, using local fallback state:", err);
+          // Standard structural fallback for client session resilience
+          setProfile({
+            uid: currentUser.uid,
+            name: currentUser.displayName || "Saisantosh Sai",
+            email: currentUser.email || "saisantoshsai3@gmail.com",
+            profilePhoto: currentUser.photoURL || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80",
+            createdAt: new Date().toISOString()
+          });
+        }
+      } else {
+        setUser(null);
+        setProfile(null);
+      }
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   const loginWithGoogle = async () => {
     setLoading(true);
-    // Use simulated secure local browser auth to satisfy client sandbox execution without external Firebase servers
-    setTimeout(() => {
-      const mockUser: UserProfile = {
-        uid: 'user-academic-sandbox',
-        name: 'Saisantosh Sai',
-        email: 'saisantoshsai3@gmail.com',
-        profilePhoto: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=120&auto=format&fit=crop&q=80',
-        createdAt: new Date().toISOString()
-      };
-      setProfile(mockUser);
-      localStorage.setItem('instamocks_user_session', JSON.stringify(mockUser));
+    try {
+      const firebaseUser = await signWithGoogleService();
+      setUser(firebaseUser);
+      const profileData = await upsertUserProfile(firebaseUser);
+      setProfile(profileData);
+    } catch (err) {
+      console.error("Google Auth execution failed:", err);
+      throw err;
+    } finally {
       setLoading(false);
-    }, 850);
+    }
   };
 
   const logout = async () => {
     setLoading(true);
-    setTimeout(() => {
+    try {
+      await logoutService();
+      setUser(null);
       setProfile(null);
-      localStorage.removeItem('instamocks_user_session');
+      // Clean drive states on standard log out
+      localStorage.removeItem("drive_wristband");
+      localStorage.removeItem("drive_email");
+      localStorage.removeItem("drive_name");
+    } catch (err) {
+      console.error("Logout execution failed:", err);
+    } finally {
       setLoading(false);
-    }, 400);
+    }
   };
 
   return (
-    <AuthContext.Provider value={{ user: profile, profile, loading, loginWithGoogle, logout }}>
+    <AuthContext.Provider value={{ user, profile, loading, loginWithGoogle, logout }}>
       {children}
     </AuthContext.Provider>
   );
