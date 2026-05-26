@@ -1,0 +1,6 @@
+{
+  "name": "InstaMocks",
+  "description": "Turn PYQs into intelligent mock tests.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
