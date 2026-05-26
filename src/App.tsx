@@ -46,6 +46,37 @@ export default function App() {
   const [calibrationOpen, setCalibrationOpen] = useState<boolean>(false);
   const [calibrationPdfId, setCalibrationPdfId] = useState<string | null>(null);
   
+  // Real Google Drive states
+  const [googleDriveConnected, setGoogleDriveConnected] = useState<boolean>(() => !!localStorage.getItem("drive_wristband"));
+  const [drivePdfs, setDrivePdfs] = useState<PDFFile[]>([]);
+  const [fetchingDrivePdfs, setFetchingDrivePdfs] = useState<boolean>(false);
+
+  const loadDrivePdfs = async () => {
+    if (!localStorage.getItem("drive_wristband")) {
+      setDrivePdfs([]);
+      return;
+    }
+    setFetchingDrivePdfs(true);
+    try {
+      const { fetchGoogleDrivePdfs, mapDriveFileToPdfFile } = await import('./services/drive');
+      const files = await fetchGoogleDrivePdfs();
+      const mapped = files.map(mapDriveFileToPdfFile);
+      setDrivePdfs(mapped);
+    } catch (err) {
+      console.error("Failed to load Google Drive PDFs:", err);
+    } finally {
+      setFetchingDrivePdfs(false);
+    }
+  };
+
+  useEffect(() => {
+    if (googleDriveConnected) {
+      loadDrivePdfs();
+    } else {
+      setDrivePdfs([]);
+    }
+  }, [googleDriveConnected, profile]);
+
   // Exam-taking states
   const [currentExamId, setCurrentExamId] = useState<string | null>(null);
   const [activeResultsId, setActiveResultsId] = useState<string | null>(null);
@@ -63,35 +94,13 @@ export default function App() {
     localStorage.setItem('instamocks_chat', JSON.stringify(chatMessages));
   }, [chatMessages]);
 
-  // Simulate progress when mock files are in "processing" state
-  useEffect(() => {
-    const hasProcessing = pdfs.some(p => p.status === 'processing');
-    if (!hasProcessing) return;
-
-    const interval = setInterval(() => {
-      setPdfs(prevPdfs => 
-        prevPdfs.map(pdf => {
-          if (pdf.status === 'processing') {
-            return {
-              ...pdf,
-              status: 'ready',
-              topics: pdf.name.toLowerCase().includes('calculus') 
-                ? ['Limits', 'Derivatives', 'Optimization']
-                : pdf.name.toLowerCase().includes('chemistry')
-                  ? ['Gases', 'Stoichiometry', 'Reactions']
-                  : ['Syllabus Chapters', 'Academic Mappings']
-            };
-          }
-          return pdf;
-        })
-      );
-    }, 4000); // 4 seconds mapping simulation
-
-    return () => clearInterval(interval);
-  }, [pdfs]);
-
   const handleLogout = async () => {
     await logout();
+    localStorage.removeItem("drive_wristband");
+    localStorage.removeItem("drive_email");
+    localStorage.removeItem("drive_name");
+    setGoogleDriveConnected(false);
+    setDrivePdfs([]);
     setCurrentExamId(null);
     setActiveResultsId(null);
     setActiveTab('dashboard');
@@ -359,7 +368,7 @@ export default function App() {
         ) : activeTab === 'dashboard' ? (
           <DashboardView
             mocks={mocks}
-            pdfs={pdfs}
+            pdfs={googleDriveConnected ? drivePdfs : pdfs}
             onStartMock={(id) => setCurrentExamId(id)}
             onViewResults={(id) => setActiveResultsId(id)}
             onOpenConfig={handleOpenCalibration}
@@ -367,10 +376,14 @@ export default function App() {
           />
         ) : activeTab === 'upload' ? (
           <UploadView
-            pdfs={pdfs}
+            pdfs={googleDriveConnected ? drivePdfs : pdfs}
             onAddPdf={handleAddPdf}
             onRemovePdf={handleRemovePdf}
             onOpenConfig={handleOpenCalibration}
+            googleDriveConnected={googleDriveConnected}
+            setGoogleDriveConnected={setGoogleDriveConnected}
+            fetchingDrivePdfs={fetchingDrivePdfs}
+            onRefreshDrivePdfs={loadDrivePdfs}
           />
         ) : activeTab === 'ai-builder' ? (
           <ChatBuilderView
@@ -384,7 +397,7 @@ export default function App() {
         {/* 3. Floating configuration sheet calibration overlay modal */}
         {calibrationOpen && (
           <ConfigPanel
-            pdfs={pdfs.filter(p => p.status === 'ready')}
+            pdfs={googleDriveConnected ? drivePdfs : pdfs.filter(p => p.status === 'ready')}
             preselectedPdfId={calibrationPdfId}
             onClose={() => setCalibrationOpen(false)}
             onGenerate={handleGenerateMock}

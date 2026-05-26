@@ -1,17 +1,11 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   UploadCloud, 
   FileText, 
   Check, 
   AlertCircle, 
-  Eye, 
   Trash2, 
-  FileSpreadsheet, 
-  Sparkles,
-  RefreshCw,
-  Library,
-  Layers,
-  Database
+  RefreshCw
 } from 'lucide-react';
 import { PDFFile } from '../types';
 import { motion } from 'motion/react';
@@ -22,28 +16,32 @@ interface UploadViewProps {
   onAddPdf: (pdf: Omit<PDFFile, 'id' | 'uploadDate'>) => void;
   onRemovePdf: (id: string) => void;
   onOpenConfig: (sourcePdfId?: string) => void;
+  googleDriveConnected?: boolean;
+  setGoogleDriveConnected?: (connected: boolean) => void;
+  fetchingDrivePdfs?: boolean;
+  onRefreshDrivePdfs?: () => Promise<void>;
 }
 
 export default function UploadView({
   pdfs,
   onAddPdf,
   onRemovePdf,
-  onOpenConfig
+  onOpenConfig,
+  googleDriveConnected = false,
+  setGoogleDriveConnected,
+  fetchingDrivePdfs = false,
+  onRefreshDrivePdfs
 }: UploadViewProps) {
   const [dragActive, setDragActive] = useState<boolean>(false);
-  const [showDriveSim, setShowDriveSim] = useState<boolean>(false);
-  const [googleDriveConnected, setGoogleDriveConnected] = useState<boolean>(() => !!localStorage.getItem("drive_wristband"));
   const [driveEmail, setDriveEmail] = useState<string | null>(() => localStorage.getItem("drive_email"));
   const [driveName, setDriveName] = useState<string | null>(() => localStorage.getItem("drive_name"));
   const [syncingDrive, setSyncingDrive] = useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Hardcoded Drive files simulator
-  const DRIVE_RESOURCES = [
-    { name: 'AP_Calculus_BC_2024_PYQ.pdf', size: '2.4 MB', pageCount: 16, subject: 'Math', topics: ['Limits', 'Derivatives', 'Taylor Series'] },
-    { name: 'SAT_Chemistry_Subject_Test_Core.pdf', size: '3.1 MB', pageCount: 22, subject: 'Chemistry', topics: ['Gases', 'Stoichiometry', 'Atomic Structure'] },
-    { name: 'MCAT_Sociological_Foundations.pdf', size: '4.8 MB', pageCount: 30, subject: 'Biology', topics: ['Social Psychology', 'Research Methods'] },
-  ];
+  useEffect(() => {
+    setDriveEmail(localStorage.getItem("drive_email"));
+    setDriveName(localStorage.getItem("drive_name"));
+  }, [googleDriveConnected]);
 
   const handleDrag = (e: React.DragEvent) => {
     e.preventDefault();
@@ -98,10 +96,14 @@ export default function UploadView({
     try {
       const success = await connectGoogleDrive();
       if (success) {
-        setGoogleDriveConnected(true);
+        if (setGoogleDriveConnected) {
+          setGoogleDriveConnected(true);
+        }
         setDriveEmail(localStorage.getItem("drive_email"));
         setDriveName(localStorage.getItem("drive_name"));
-        setShowDriveSim(true);
+        if (onRefreshDrivePdfs) {
+          await onRefreshDrivePdfs();
+        }
       }
     } catch (err) {
       console.error("Drive error:", err);
@@ -110,17 +112,12 @@ export default function UploadView({
     }
   };
 
-  const importDriveFile = (item: typeof DRIVE_RESOURCES[0]) => {
-    onAddPdf({
-      name: item.name,
-      size: item.size,
-      status: 'processing',
-      pageCount: item.pageCount,
-      subject: item.subject,
-      topics: item.topics
-    });
-    // Close simulator drawer after choice
-    setShowDriveSim(false);
+  const handleManualRefresh = async () => {
+    if (onRefreshDrivePdfs) {
+      setSyncingDrive(true);
+      await onRefreshDrivePdfs();
+      setSyncingDrive(false);
+    }
   };
 
   return (
@@ -213,153 +210,106 @@ export default function UploadView({
             </span>
           </form>
 
-          {/* Drive Simulator modal drawer */}
-          {showDriveSim && (
-            <motion.div 
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="p-6 rounded-xl bg-[#0C0C0C] border border-[#1F1F1F] shadow-2xl"
-            >
-              <div className="flex justify-between items-center mb-4 pb-2 border-b border-[#1F1F1F]">
-                <div className="flex items-center gap-2">
-                  <svg className="w-4 h-4 text-emerald-500" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M19.43 12.98c.04-.32.07-.64.07-.98s-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.3-.61-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65C14.46  2.18 14.25 2 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.23-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.98s.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.23.09.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z" />
-                  </svg>
-                  <span className="font-sans font-bold text-xs text-zinc-200">Simulating synced University Drive Folder</span>
-                </div>
-                <button 
-                  onClick={() => setShowDriveSim(false)}
-                  className="font-mono text-[9px] text-[#555] hover:text-[#888] uppercase font-bold"
-                >
-                  Close [Esc]
-                </button>
-              </div>
-
-              <div className="space-y-2">
-                {DRIVE_RESOURCES.map((item, idx) => (
-                  <div 
-                    key={idx}
-                    className="flex items-center justify-between p-3.5 rounded bg-[#0F0F0F] border border-[#1F1F1F] hover:border-[#333] transition-all text-xs"
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0 font-sans">
-                      <FileText className="w-4 h-4 text-[#555] shrink-0" />
-                      <div>
-                        <p className="font-sans text-white font-semibold truncate">{item.name}</p>
-                        <p className="font-mono text-[9px] text-[#555] font-bold">{item.size} • {item.subject} • {item.pageCount} pages</p>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => importDriveFile(item)}
-                      className="px-3 py-1.5 bg-white text-black rounded font-bold font-sans text-[10px] shadow-sm hover:scale-101 transition-all"
-                    >
-                      Import asset
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </motion.div>
-          )}
-
+          {/* Real Google Drive PDFs lists or Local uploaded files depending on connection status */}
         </div>
 
         {/* Right column: Current catalog listing */}
         <div className="space-y-6">
           <div className="flex items-center justify-between font-sans">
             <h3 className="font-sans font-bold text-base text-white tracking-tight">
-              Active Syllabus Index ({pdfs.filter(p => p.status === 'ready').length})
+              Drive PDFs {googleDriveConnected && pdfs.length > 0 ? `(${pdfs.length})` : ''}
             </h3>
-            <span className="font-mono text-[9px] text-[#555] font-bold uppercase">Auto Save</span>
+            {googleDriveConnected && (
+              <button 
+                onClick={handleManualRefresh}
+                disabled={syncingDrive || fetchingDrivePdfs}
+                className="text-[#888] hover:text-white flex items-center gap-1.5 transition-colors group cursor-pointer text-xs"
+                title="Refresh PDF list"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 ${fetchingDrivePdfs || syncingDrive ? 'animate-spin' : 'group-hover:rotate-180 transition-transform duration-500'}`} />
+                <span className="font-mono text-[9px] font-bold uppercase">Sync</span>
+              </button>
+            )}
           </div>
 
           <div className="space-y-3">
-            {pdfs.map((pdf) => {
-              const isProcessing = pdf.status === 'processing';
-              return (
-                <div
-                  key={pdf.id}
-                  className="p-4 rounded-xl bg-[#0C0C0C] border border-[#1F1F1F] relative overflow-hidden transition-all hover:border-[#333] shadow-2xl"
-                >
-                  <div className="flex items-start gap-3 justify-between">
-                    <div className="flex items-start gap-2.5 min-w-0">
-                      <FileText className={`w-4 h-4 mt-0.5 shrink-0 ${isProcessing ? 'text-amber-500 animate-pulse' : 'text-[#555]'}`} />
-                      <div className="min-w-0 font-sans">
-                        <p className="font-sans font-semibold text-xs text-[#EDEDED] truncate" title={pdf.name}>
-                          {pdf.name}
-                        </p>
-                        <p className="font-mono text-[9px] text-[#555] font-bold">
-                          {pdf.size} &middot; {pdf.subject}
-                        </p>
-                      </div>
-                    </div>
-
-                    {!isProcessing && (
-                      <button
-                        onClick={() => onRemovePdf(pdf.id)}
-                        className="p-1 rounded text-[#555] hover:text-red-400 hover:bg-[#121212] transition-colors shrink-0"
-                        title="Delete source catalog"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Processing animation indicator */}
-                  {isProcessing ? (
-                    <div className="mt-4 space-y-1.5">
-                      <div className="flex justify-between font-mono text-[8px] text-[#888] font-bold">
-                        <span className="flex items-center gap-1">
-                          <RefreshCw className="w-2.5 h-2.5 animate-spin text-[#888]" />
-                          <span>Mapping chapters & marking scheme</span>
-                        </span>
-                        <span>Compiling...</span>
-                      </div>
-                      
-                      {/* Indeterminate modern loading line bar */}
-                      <div className="h-1 bg-[#121212] rounded-full overflow-hidden relative">
-                        <motion.div 
-                          className="h-full bg-gradient-to-r from-orange-400 to-rose-400 rounded-full"
-                          initial={{ x: '-100%' }}
-                          animate={{ x: '100%' }}
-                          transition={{ repeat: Infinity, duration: 1.5, ease: 'easeInOut' }}
-                          style={{ width: '60%' }}
-                        />
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="mt-4 pt-4 border-t border-[#1F1F1F] flex flex-wrap gap-1.5 items-center justify-between">
-                      <div className="flex items-center gap-1.5 leading-none">
-                        <Check className="w-3.5 h-3.5 text-emerald-500" />
-                        <span className="font-mono text-[9px] text-[#888] font-bold uppercase tracking-widest">{pdf.pageCount} Pages Loaded</span>
-                      </div>
-                      
-                      <button
-                        onClick={() => onOpenConfig(pdf.id)}
-                        className="font-mono text-[9px] bg-white text-black font-bold px-3 py-1.5 rounded shadow-[0_0_15px_rgba(255,255,255,0.1)] hover:scale-[1.01] transition-all"
-                      >
-                        Launch AI Calibration
-                      </button>
-                    </div>
-                  )}
-
-                  {pdf.topics && pdf.topics.length > 0 && (
-                    <div className="mt-2.5 flex flex-wrap gap-1">
-                      {pdf.topics.map((top, idx) => (
-                        <span 
-                          key={idx} 
-                          className="text-[9px] font-sans font-semibold px-2 py-0.5 bg-[#121212] text-[#888] rounded border border-[#1F1F1F]"
-                        >
-                          {top}
-                        </span>
-                      ))}
-                    </div>
-                  )}
+            {googleDriveConnected ? (
+              fetchingDrivePdfs || syncingDrive ? (
+                <div className="py-16 flex flex-col items-center justify-center gap-3 text-center border border-[#1F1F1F] rounded-xl bg-[#0C0C0C]/40">
+                  <RefreshCw className="w-6 h-6 animate-spin text-[#888]" />
+                  <p className="font-sans text-xs text-[#888]">Fetching files from Google Drive...</p>
                 </div>
-              );
-            })}
+              ) : pdfs.length === 0 ? (
+                <div className="p-8 text-center text-[#555] font-sans text-xs border border-dashed border-[#1F1F1F] py-10 rounded-xl leading-relaxed">
+                  No PDFs found in connected Google Drive.
+                </div>
+              ) : (
+                pdfs.map((pdf) => {
+                  return (
+                    <div
+                      key={pdf.id}
+                      className="p-4 rounded-xl bg-[#0C0C0C] border border-[#1F1F1F] relative overflow-hidden transition-all hover:border-[#333] shadow-2xl"
+                    >
+                      <div className="flex items-start gap-3 justify-between">
+                        <div className="flex items-start gap-2.5 min-w-0">
+                          <FileText className="w-4 h-4 mt-0.5 shrink-0 text-red-500 stroke-[1.8]" />
+                          <div className="min-w-0 font-sans">
+                            <p className="font-sans font-semibold text-xs text-[#EDEDED] truncate" title={pdf.name}>
+                              {pdf.name}
+                            </p>
+                            <p className="font-mono text-[9px] text-[#555] font-bold">
+                              {pdf.size} &middot; {pdf.subject}
+                            </p>
+                          </div>
+                        </div>
 
-            {pdfs.length === 0 && (
-              <div className="p-8 text-center text-[#555] font-sans text-xs border border-dashed border-[#1F1F1F] py-10 rounded-xl">
-                Your syllabus inventory is empty. Complete an upload to begin.
+                        <button
+                          onClick={() => onRemovePdf(pdf.id)}
+                          className="p-1 rounded text-[#555] hover:text-red-400 hover:bg-[#121212] transition-colors shrink-0"
+                          title="Remove item"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      <div className="mt-4 pt-3.5 border-t border-[#1F1F1F] flex flex-wrap gap-1.5 items-center justify-between">
+                        <div className="flex items-center gap-1.5 leading-none">
+                          <Check className="w-3.5 h-3.5 text-emerald-500" />
+                          <span className="font-mono text-[9px] text-[#888] font-bold uppercase tracking-widest">
+                            Modified: {pdf.uploadDate}
+                          </span>
+                        </div>
+                        
+                        <button
+                          onClick={() => onOpenConfig(pdf.id)}
+                          className="font-mono text-[9px] bg-white text-black font-bold px-3 py-1.5 rounded shadow-[0_0_15px_rgba(255,255,255,0.1)] hover:scale-[1.01] transition-all cursor-pointer"
+                        >
+                          Launch AI Calibration
+                        </button>
+                      </div>
+
+                      {pdf.topics && pdf.topics.length > 0 && (
+                        <div className="mt-2.5 flex flex-wrap gap-1">
+                          {pdf.topics.map((top, idx) => (
+                            <span 
+                              key={idx} 
+                              className="text-[9px] font-sans font-semibold px-2 py-0.5 bg-[#121212] text-[#888] rounded border border-[#1F1F1F]"
+                            >
+                              {top}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )
+            ) : (
+              <div className="p-10 text-center text-[#555] font-sans text-xs border border-dashed border-[#1F1F1F] py-12 rounded-xl flex flex-col items-center justify-center gap-3">
+                <svg className="w-8 h-8 text-zinc-700" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M19.43 12.98c.04-.32.07-.64.07-.98s-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.3-.61-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65C14.46  2.18 14.25 2 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.23-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.98s.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.23.09.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z" />
+                </svg>
+                <span>No PDFs found in connected Google Drive. Sync Google Drive to search and load study materials.</span>
               </div>
             )}
           </div>
